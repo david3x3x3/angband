@@ -47,7 +47,7 @@
 struct cmd_info
 {
 	const char *desc;
-	unsigned char key;
+	keycode_t key;
 	cmd_code cmd;
 	void (*hook)(void);
 	bool (*prereq)(void);
@@ -329,11 +329,12 @@ void cmd_init(void)
 
 		/* Fill everything in */
 		for (i = 0; i < cmds_all[j].len; i++)
-			converted_list[commands[i].key] = &commands[i];
+			if (commands[i].key <= UCHAR_MAX)
+				converted_list[commands[i].key] = &commands[i];
 	}
 }
 
-unsigned char cmd_lookup_key(cmd_code lookup_cmd)
+keycode_t cmd_lookup_key(cmd_code lookup_cmd)
 {
 	unsigned int i;
 
@@ -347,7 +348,7 @@ unsigned char cmd_lookup_key(cmd_code lookup_cmd)
 	return 0;
 }
 
-cmd_code cmd_lookup(unsigned char key)
+cmd_code cmd_lookup(keycode_t key)
 {
 	if (!converted_list[key])
 		return CMD_NULL;
