@@ -68,7 +68,11 @@ typedef struct player
 
 	const struct player_sex *sex;
 	const struct player_race *race;
+#if defined(__cplusplus) || defined(c_plusplus)
+	const struct player_class *c_class;
+#else
 	const struct player_class *class;
+#endif
 
 	byte hitdie;		/* Hit dice (sides) */
 	byte expfact;		/* Experience factor */
