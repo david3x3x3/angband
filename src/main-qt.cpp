@@ -139,7 +139,6 @@ public:
 
 private:
 	QGraphicsTextItem *screen[24][80];
-	QApplication *app;
 	QMainWindow *mainWindow;
 	QGraphicsScene *scene;
 	QGraphicsView *view;
