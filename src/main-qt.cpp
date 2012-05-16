@@ -33,45 +33,87 @@ static errr qt_get_cmd(cmd_context context, bool wait)
 		return textui_get_cmd(context, wait);
 }
 
-QGraphicsTextItem *screen[24][80];
-QApplication *app;
-QMainWindow *mainWindow;
-QGraphicsScene *scene;
+class AngbandTextEvent : public QEvent {
+public:
+	AngbandTextEvent() : QEvent((QEvent::Type)(QEvent::User + 1)) {}
+	~AngbandTextEvent() {}
+	int x;
+	int y;
+	int n;
+	byte a;
+	const wchar_t *s;
+};
 
-int init_qt( int argc, char **argv ) {
-	app = new QApplication( argc, argv );
-	mainWindow = new QMainWindow();
-	scene = new QGraphicsScene(QRectF(0, 0, 80*8, 24*10));
-	scene->setBackgroundBrush(Qt::black);
-	QGraphicsView view(scene);
-	QFont myfont("Courier", 10);
-	QFontInfo myfontinfo(myfont);
-	qreal height = 0.0;
-	qreal width = 0.0;
-	char str[2];
-	for (int r=0;r<24;r++) {
-		for (int c=0;c<80;c++) {
-			sprintf(str, "%c", ' '+((r*24+c)%224));
-			QGraphicsTextItem *text = scene->addText(str);
-			text->setFont(myfont);
-			text->document()->setDocumentMargin(0);
-			text->setDefaultTextColor(Qt::white);
-			if (!r && !c) {
-				QRectF rect = text->boundingRect();
-				height = text->document()->size().height();
-				width = text->document()->size().width();
-				scene->setSceneRect(0,0,width*80,height*24);
-				std::cout << "width = " << width << "\n";
+class AngbandApp : public QApplication {
+public:
+	AngbandApp( int argc, char **argv ) : QApplication(argc, argv) {
+		mainWindow = new QMainWindow();
+		scene = new QGraphicsScene(QRectF(0, 0, 80*8, 24*10));
+		scene->setBackgroundBrush(Qt::black);
+		QGraphicsView view(scene);
+		QFont myfont("Courier", 10);
+		QFontInfo myfontinfo(myfont);
+		qreal height = 0.0;
+		qreal width = 0.0;
+		char str[2];
+		for (int r=0;r<24;r++) {
+			for (int c=0;c<80;c++) {
+				sprintf(str, "%c", ' '+((r*24+c)%224));
+				QGraphicsTextItem *text = scene->addText(str);
+				text->setFont(myfont);
+				text->document()->setDocumentMargin(0);
+				text->setDefaultTextColor(Qt::white);
+				if (!r && !c) {
+					QRectF rect = text->boundingRect();
+					height = text->document()->size().height();
+					width = text->document()->size().width();
+					scene->setSceneRect(0,0,width*80,height*24);
+					std::cout << "width = " << width << "\n";
+				}
+				text->translate(c*width,r*height);
+				screen[r][c] = text;
 			}
-			text->translate(c*width,r*height);
-			screen[r][c] = text;
+		}
+		mainWindow->setCentralWidget(&view);
+		//app->setMainWidget( view );
+		mainWindow->show();
+
+		cmd_get_hook = qt_get_cmd;
+	}
+
+	errr term_text_qt(int x, int y, int n, byte a, const wchar_t *s) {
+		std::cout << "Term_text_qt(" << s << ")\n";
+		/* Draw the text */
+		/* Infoclr_set(clr[a]); */
+		char str[2];
+		for (int i=0; i< n; i++) {
+			sprintf(str, "%c", s[i] < 256 ? s[i] : '*');
+			screen[y][x+i]->setPlainText(str);
+		}
+
+		/* Success */
+		return (0);
+	}
+
+	void QObject::customEvent(QEvent *event) {
+		if(e->type() == (QEvent::User + 1)) {
+			std::cout "custom event received\n";
 		}
 	}
-	mainWindow->setCentralWidget(&view);
-	//app->setMainWidget( view );
-	mainWindow->show();
 
-    cmd_get_hook = qt_get_cmd;
+private:
+	QGraphicsTextItem *screen[24][80];
+	QApplication *app;
+	QMainWindow *mainWindow;
+	QGraphicsScene *scene;
+} *app;
+
+static errr term_text_qt(int x, int y, int n, byte a, const wchar_t *s) {
+	return app->term_text_qt(x,y,n,a,s);
+}
+
+int init_qt( int argc, char **argv ) {
+	app = new AngbandApp( argc, argv );
 	return 0;
 }
 
@@ -95,24 +137,9 @@ static void init_stuff(void)
 
 	/* Set up sound hook */
 	sound_hook = NULL;
-}
 
-/*
- * Draw some textual characters.
- */
-static errr term_text_qt(int x, int y, int n, byte a, const wchar_t *s)
-{
-	std::cout << "Term_text_qt(" << s << ")\n";
-	/* Draw the text */
-	/* Infoclr_set(clr[a]); */
-	char str[2];
-	for (int i=0; i< n; i++) {
-		sprintf(str, "%c", s[i] < 256 ? s[i] : '*');
-		screen[y][x+i]->setPlainText(str);
-	}
-
-	/* Success */
-	return (0);
+	/* Set up the display handlers and things. */
+	init_display();
 }
 
 static void term_init_qt(term *t) {
@@ -164,22 +191,22 @@ static errr term_data_init(term_data *td, int i) {
 	return 0;
 }
 
- class GameThread : public QThread
- {
-     Q_OBJECT
+class GameThread : public QThread
+{
+	Q_OBJECT
 
- protected:
-     void run();
- };
+	protected:
+	void run();
+};
 
- void GameThread::run() {
-	 std::cout << "starting game thread\n";
+void GameThread::run() {
+	std::cout << "starting game thread\n";
 	/* Play the game */
 	play_game();
 
 	/* Free resources */
 	cleanup_angband();
- }
+}
 
 int main( int argc, char **argv ) {
 	if (init_qt(argc, argv) != 0) {
@@ -195,6 +222,9 @@ int main( int argc, char **argv ) {
 	Term_activate(&td.t);
 
 	GameThread *game_thread = new GameThread();
+	// QObject::connect( game_thread, SIGNAL( MySignal() ),
+	// 				  & myObject, SLOT( MySlot() ) );
+
 	game_thread->start();
 
 	return app->exec();
