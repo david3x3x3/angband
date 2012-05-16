@@ -65,22 +65,39 @@ private:
 	char *str;
 };
 
+class AngbandWipeEvent : public QEvent {
+public:
+	AngbandWipeEvent(int new_x, int new_y, int new_n) :
+		QEvent((QEvent::Type)(QEvent::User + 2)) {
+		x = new_x;
+		y = new_y;
+		n = new_n;
+	}
+	~AngbandWipeEvent() {
+	}
+	int get_x() { return x; }
+	int get_y() { return y; }
+	int get_n() { return n; }
+private:
+	int x;
+	int y;
+	int n;
+};
+
 class AngbandApp : public QApplication {
 public:
 	AngbandApp( int argc, char **argv ) : QApplication(argc, argv) {
 		mainWindow = new QMainWindow();
 		scene = new QGraphicsScene(QRectF(0, 0, 80*8, 24*10));
 		scene->setBackgroundBrush(Qt::black);
-		QGraphicsView view(scene);
+		view = new QGraphicsView(scene);
 		QFont myfont("Courier", 10);
 		QFontInfo myfontinfo(myfont);
 		qreal height = 0.0;
 		qreal width = 0.0;
-		char str[2];
 		for (int r=0;r<24;r++) {
 			for (int c=0;c<80;c++) {
-				sprintf(str, "%c", ' '+((r*24+c)%224));
-				QGraphicsTextItem *text = scene->addText(str);
+				QGraphicsTextItem *text = scene->addText(" ");
 				text->setFont(myfont);
 				text->document()->setDocumentMargin(0);
 				text->setDefaultTextColor(Qt::white);
@@ -95,7 +112,7 @@ public:
 				screen[r][c] = text;
 			}
 		}
-		mainWindow->setCentralWidget(&view);
+		mainWindow->setCentralWidget(view);
 		//app->setMainWidget( view );
 		mainWindow->show();
 
@@ -104,12 +121,18 @@ public:
 
 	void customEvent(QEvent *e) {
 		if(e->type() == (QEvent::User + 1)) {
-			std::cout << "custom event received\n";
+			std::cout << "text event received\n";
 			AngbandTextEvent *te = (AngbandTextEvent *)e;
 			char str[2];
 			for (int i=0; i< te->get_n(); i++) {
 				sprintf(str, "%c", te->get_str()[i]);
 				screen[te->get_y()][te->get_x()+i]->setPlainText(str);
+			}
+		} else if(e->type() == (QEvent::User + 2)) {
+			std::cout << "wipe event received\n";
+			AngbandWipeEvent *we = (AngbandWipeEvent *)e;
+			for (int i=0; i< we->get_n(); i++) {
+				screen[we->get_y()][we->get_x()+i]->setPlainText(" ");
 			}
 		}
 	}
@@ -119,6 +142,7 @@ private:
 	QApplication *app;
 	QMainWindow *mainWindow;
 	QGraphicsScene *scene;
+	QGraphicsView *view;
 } *app;
 
 static errr term_text_qt(int x, int y, int n, byte a, const wchar_t *s) {
@@ -166,11 +190,26 @@ static void term_nuke_qt(term *t) {
 
 static errr term_xtra_qt(int n, int v) {
 	std::cout << "term_xtra_qt(" << n << "," << v << ")\n";
+	switch(n) {
+	case TERM_XTRA_EVENT: std::cout << "TERM_XTRA_EVENT\n"; break;
+	case TERM_XTRA_FLUSH: std::cout << "TERM_XTRA_FLUSH\n"; break;
+	case TERM_XTRA_CLEAR: std::cout << "TERM_XTRA_CLEAR\n"; break;
+	case TERM_XTRA_SHAPE: std::cout << "TERM_XTRA_SHAPE\n"; break;
+	case TERM_XTRA_FROSH: std::cout << "TERM_XTRA_FROSH\n"; break;
+	case TERM_XTRA_FRESH: std::cout << "TERM_XTRA_FRESH\n"; break;
+	case TERM_XTRA_NOISE: std::cout << "TERM_XTRA_NOISE\n"; break;
+	case TERM_XTRA_BORED: std::cout << "TERM_XTRA_BORED\n"; break;
+	case TERM_XTRA_REACT: std::cout << "TERM_XTRA_REACT\n"; break;
+	case TERM_XTRA_ALIVE: std::cout << "TERM_XTRA_ALIVE\n"; break;
+	case TERM_XTRA_LEVEL: std::cout << "TERM_XTRA_LEVEL\n"; break;
+	case TERM_XTRA_DELAY: std::cout << "TERM_XTRA_DELAY\n"; break;
+	}
 	return -1;
 }
 
 static errr term_wipe_qt(int x, int y, int n) {
 	std::cout << "term_wipe_qt(" << x << "," << y << "," << n <<")\n";
+	app->postEvent(app, new AngbandWipeEvent(x,y,n));
 	return -1;
 }
 
@@ -235,11 +274,8 @@ int main( int argc, char **argv ) {
 	term_data_init(&td, 0);
 	Term_activate(&td.t);
 
-	//GameThread *game_thread = new GameThread();
-	// QObject::connect( game_thread, SIGNAL( MySignal() ),
-	// 				  & myObject, SLOT( MySlot() ) );
-
-	//game_thread->start();
+	GameThread *game_thread = new GameThread();
+	game_thread->start();
 
 	return app->exec();
 }
