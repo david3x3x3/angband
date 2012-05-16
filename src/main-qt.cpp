@@ -120,7 +120,7 @@ public:
 	}
 
 	void customEvent(QEvent *e) {
-		if(e->type() == (QEvent::User + 1)) {
+		if (e->type() == (QEvent::User + 1)) {
 			std::cout << "text event received\n";
 			AngbandTextEvent *te = (AngbandTextEvent *)e;
 			char str[2];
@@ -128,7 +128,7 @@ public:
 				sprintf(str, "%c", te->get_str()[i]);
 				screen[te->get_y()][te->get_x()+i]->setPlainText(str);
 			}
-		} else if(e->type() == (QEvent::User + 2)) {
+		} else if (e->type() == (QEvent::User + 2)) {
 			std::cout << "wipe event received\n";
 			AngbandWipeEvent *we = (AngbandWipeEvent *)e;
 			for (int i=0; i< we->get_n(); i++) {
@@ -146,11 +146,6 @@ private:
 
 static errr term_text_qt(int x, int y, int n, byte a, const wchar_t *s) {
 	app->postEvent(app, new AngbandTextEvent(x,y,n,a,s));
-	return 0;
-}
-
-int init_qt( int argc, char **argv ) {
-	app = new AngbandApp( argc, argv );
 	return 0;
 }
 
@@ -261,10 +256,7 @@ void GameThread::run() {
 }
 
 int main( int argc, char **argv ) {
-	if (init_qt(argc, argv) != 0) {
-		//quit("Oops!");
-		exit(1);
-	}
+	app = new AngbandApp( argc, argv );
 
 	/* Initialize some stuff */
 	init_stuff();
