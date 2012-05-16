@@ -35,13 +35,34 @@ static errr qt_get_cmd(cmd_context context, bool wait)
 
 class AngbandTextEvent : public QEvent {
 public:
-	AngbandTextEvent() : QEvent((QEvent::Type)(QEvent::User + 1)) {}
-	~AngbandTextEvent() {}
+	AngbandTextEvent(int new_x, int new_y, int new_n, int new_a,
+					 const wchar_t *s) :
+		QEvent((QEvent::Type)(QEvent::User + 1)) {
+		x = new_x;
+		y = new_y;
+		n = new_n;
+		a = new_a;
+		str = new char[n+1];
+		for (int i=0; i < n; i++) {
+			wchar_t c = s[i];
+			str[i] = c < 256 ? c : '*';
+		}
+		str[n] = '\0';
+	}
+	~AngbandTextEvent() {
+		delete str;
+	}
+	int get_x() { return x; }
+	int get_y() { return y; }
+	int get_n() { return n; }
+	int get_a() { return a; }
+	char *get_str() { return str; }
+private:
 	int x;
 	int y;
 	int n;
 	byte a;
-	const wchar_t *s;
+	char *str;
 };
 
 class AngbandApp : public QApplication {
@@ -81,23 +102,15 @@ public:
 		cmd_get_hook = qt_get_cmd;
 	}
 
-	errr term_text_qt(int x, int y, int n, byte a, const wchar_t *s) {
-		std::cout << "Term_text_qt(" << s << ")\n";
-		/* Draw the text */
-		/* Infoclr_set(clr[a]); */
-		char str[2];
-		for (int i=0; i< n; i++) {
-			sprintf(str, "%c", s[i] < 256 ? s[i] : '*');
-			screen[y][x+i]->setPlainText(str);
-		}
-
-		/* Success */
-		return (0);
-	}
-
-	void QObject::customEvent(QEvent *event) {
+	void customEvent(QEvent *e) {
 		if(e->type() == (QEvent::User + 1)) {
-			std::cout "custom event received\n";
+			std::cout << "custom event received\n";
+			AngbandTextEvent *te = (AngbandTextEvent *)e;
+			char str[2];
+			for (int i=0; i< te->get_n(); i++) {
+				sprintf(str, "%c", te->get_str()[i]);
+				screen[te->get_y()][te->get_x()+i]->setPlainText(str);
+			}
 		}
 	}
 
@@ -109,7 +122,8 @@ private:
 } *app;
 
 static errr term_text_qt(int x, int y, int n, byte a, const wchar_t *s) {
-	return app->term_text_qt(x,y,n,a,s);
+	app->postEvent(app, new AngbandTextEvent(x,y,n,a,s));
+	return 0;
 }
 
 int init_qt( int argc, char **argv ) {
@@ -221,11 +235,11 @@ int main( int argc, char **argv ) {
 	term_data_init(&td, 0);
 	Term_activate(&td.t);
 
-	GameThread *game_thread = new GameThread();
+	//GameThread *game_thread = new GameThread();
 	// QObject::connect( game_thread, SIGNAL( MySignal() ),
 	// 				  & myObject, SLOT( MySlot() ) );
 
-	game_thread->start();
+	//game_thread->start();
 
 	return app->exec();
 }
