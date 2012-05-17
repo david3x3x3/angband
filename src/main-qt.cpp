@@ -122,14 +122,20 @@ bool keyPressCatcher::eventFilter(QObject* object, QEvent* event) {
 		QKeyEvent *keyEvent = dynamic_cast<QKeyEvent *>(event);
 
 		switch(keyEvent->key()) {
-		case Qt::Key_Up:    key = ARROW_UP;    break;
-		case Qt::Key_Down:  key = ARROW_DOWN;  break;
-		case Qt::Key_Left:  key = ARROW_LEFT;  break;
-		case Qt::Key_Right: key = ARROW_RIGHT; break;
+		case Qt::Key_Up:     key = ARROW_UP;    break;
+		case Qt::Key_Down:   key = ARROW_DOWN;  break;
+		case Qt::Key_Left:   key = ARROW_LEFT;  break;
+		case Qt::Key_Right:  key = ARROW_RIGHT; break;
+		case Qt::Key_Enter:  key = KC_ENTER;    break;
+		case Qt::Key_Return: key = KC_ENTER;    break;
+		case Qt::Key_Escape: key = ESCAPE;      break;
+		case Qt::Key_Tab:    key = KC_TAB;      break;
 		default:
-			std::cout << "You Pressed " << keyEvent->text().toStdString() <<
-				"\n";
 			QByteArray ba = keyEvent->text().toAscii();
+			if(ba.length() != 1) {
+				std::cout << "unknown key: " << keyEvent->key() << "\n";
+				return true;
+			}
 			key = ba.at(0);
 		}
 
@@ -255,6 +261,8 @@ static errr term_data_init(term_data *td, int i) {
     t->curs_hook = term_curs_qt;
     t->text_hook = term_text_qt;
     t->pict_hook = term_pict_qt;
+
+	t->complex_input = TRUE;
     
 	angband_term[i] = t;
 	return 0;
