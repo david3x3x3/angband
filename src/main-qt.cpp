@@ -51,6 +51,24 @@ public:
 		QFontInfo myfontinfo(myfont);
 		qreal height = 0.0;
 		qreal width = 0.0;
+
+		colortable[TERM_DARK]    = QColor( 0*8,  0*8,  0*8);
+		colortable[TERM_WHITE]   = QColor(31*8, 31*8, 31*8);
+		colortable[TERM_SLATE]   = QColor(15*8, 15*8, 15*8);
+		colortable[TERM_ORANGE]  = QColor(31*8, 15*8,  0*8);
+		colortable[TERM_RED]     = QColor(23*8,  0*8,  0*8);
+		colortable[TERM_GREEN]   = QColor( 0*8, 15*8,  9*8);
+		colortable[TERM_BLUE]    = QColor( 0*8,  0*8, 31*8);
+		colortable[TERM_UMBER]   = QColor(15*8,  9*8,  0*8);
+		colortable[TERM_L_DARK]  = QColor( 9*8,  9*8,  9*8);
+		colortable[TERM_L_WHITE] = QColor(23*8, 23*8, 23*8);
+		colortable[TERM_VIOLET]  = QColor(31*8,  0*8, 31*8);
+		colortable[TERM_YELLOW]  = QColor(31*8, 31*8,  0*8);
+		colortable[TERM_L_RED]   = QColor(31*8,  0*8,  0*8);
+		colortable[TERM_L_GREEN] = QColor( 0*8, 31*8,  0*8);
+		colortable[TERM_L_BLUE]  = QColor( 0*8, 31*8, 31*8);
+		colortable[TERM_L_UMBER] = QColor(23*8, 15*8,  9*8);
+
 		for (int r=0;r<24;r++) {
 			for (int c=0;c<80;c++) {
 				QGraphicsTextItem *text = scene->addText(" ");
@@ -88,10 +106,13 @@ public:
 	errr term_text(int x, int y, int n, byte a, const wchar_t *s) {
 		char str[2];
 		str[1] = '\0';
+		int attr = a & 127;
+		std::cout << "color = " << attr << "\n";
 		for (int i=0; i < n; i++) {
 			wchar_t c = s[i];
 			str[0] = c < 256 ? c : '*';
 			screen[y][x+i]->setPlainText(str);
+			screen[y][x+i]->setDefaultTextColor(colortable[attr]);
 		}
 		return 0;
 	}
@@ -113,10 +134,11 @@ private:
 	QGraphicsScene *scene;
 	QGraphicsView *view;
 	QQueue<int> key_queue;
+	QColor colortable[BASIC_COLORS];
 } *app;
 
 bool keyPressCatcher::eventFilter(QObject* object, QEvent* event) {
-	std::cout << "keyPressCatcher: " << (int)event << "\n";
+	//std::cout << "keyPressCatcher: " << (int)event << "\n";
 	if (event->type() == QEvent::KeyPress) {
 		keycode_t key;
 		QKeyEvent *keyEvent = dynamic_cast<QKeyEvent *>(event);
@@ -194,6 +216,7 @@ static void term_nuke_qt(term *t) {
 #define CHECK_EVENTS_WAIT 1
 
 static bool check_events(int wait) {
+	// TODO: we need to handle DeferredEvents here.
 	if (wait == CHECK_EVENTS_WAIT) {
 		while (app->get_key_queue()->isEmpty()) {
 			app->processEvents();
