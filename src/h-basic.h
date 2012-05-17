@@ -149,37 +149,38 @@
  * s32b/u32b are exactly 4 bytes (where possible)
  */
 
-/* C++ defines its own bool type, so we hack around it */
-#undef bool
-#define bool bool_hack
-
 typedef int errr;
 
-
-/*
- * Use a real bool type where possible
- */
-#ifdef HAVE_STDBOOL_H
-
-  #include <stdbool.h>
-
-  #undef TRUE
-  #undef FALSE
-
-  #define TRUE  true
-  #define FALSE false
-
-#else
-
-  /* Use a char otherwise */
-  typedef char bool;
-
-  #undef TRUE
-  #undef FALSE
-
-  #define TRUE   1
-  #define FALSE  0
-
+#if !defined(__cplusplus) && !defined(c_plusplus)
+	/* C++ defines its own bool type, so we hack around it */
+	#undef bool
+	#define bool bool_hack
+	
+	/*
+	 * Use a real bool type where possible
+	 */
+	#ifdef HAVE_STDBOOL_H
+	
+		#include <stdbool.h>
+	
+		#undef TRUE
+		#undef FALSE
+	
+		#define TRUE  true
+		#define FALSE false
+	
+	#else
+	
+		/* Use a char otherwise */
+		typedef char bool;
+	
+		#undef TRUE
+		#undef FALSE
+	
+		#define TRUE   1
+		#define FALSE  0
+	
+	#endif
 #endif
 
 

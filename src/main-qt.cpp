@@ -33,9 +33,9 @@ static errr qt_get_cmd(cmd_context context, bool wait)
 		return textui_get_cmd(context, wait);
 }
 
-class AngbandTextEvent : public QEvent {
+class AngTextEvent : public QEvent {
 public:
-	AngbandTextEvent(int new_x, int new_y, int new_n, int new_a,
+	AngTextEvent(int new_x, int new_y, int new_n, int new_a,
 					 const wchar_t *s) :
 		QEvent((QEvent::Type)(QEvent::User + 1)) {
 		x = new_x;
@@ -49,7 +49,7 @@ public:
 		}
 		str[n] = '\0';
 	}
-	~AngbandTextEvent() {
+	~AngTextEvent() {
 		delete str;
 	}
 	int get_x() { return x; }
@@ -65,15 +65,15 @@ private:
 	char *str;
 };
 
-class AngbandWipeEvent : public QEvent {
+class AngWipeEvent : public QEvent {
 public:
-	AngbandWipeEvent(int new_x, int new_y, int new_n) :
+	AngWipeEvent(int new_x, int new_y, int new_n) :
 		QEvent((QEvent::Type)(QEvent::User + 2)) {
 		x = new_x;
 		y = new_y;
 		n = new_n;
 	}
-	~AngbandWipeEvent() {
+	~AngWipeEvent() {
 	}
 	int get_x() { return x; }
 	int get_y() { return y; }
@@ -84,9 +84,27 @@ private:
 	int n;
 };
 
-class AngbandApp : public QApplication {
+class keyPressCatcher : public QObject {
 public:
-	AngbandApp( int argc, char **argv ) : QApplication(argc, argv) {
+	keyPressCatcher() {}
+	~keyPressCatcher() {}
+  
+	bool eventFilter(QObject* object, QEvent* event) {
+		if (event->type() == QEvent::KeyPress) {
+			QKeyEvent *keyEvent = dynamic_cast<QKeyEvent *>(event);
+			std::cout << "You Pressed " << keyEvent->text().toStdString() <<
+				"\n";
+			return true;
+		} else {
+			// standard event processing
+			return QObject::eventFilter(object, event);
+		}
+	}
+};
+
+class AngApp : public QApplication {
+public:
+	AngApp( int argc, char **argv ) : QApplication(argc, argv) {
 		mainWindow = new QMainWindow();
 		scene = new QGraphicsScene(QRectF(0, 0, 80*8, 24*10));
 		scene->setBackgroundBrush(Qt::black);
@@ -113,6 +131,7 @@ public:
 			}
 		}
 		mainWindow->setCentralWidget(view);
+		mainWindow->installEventFilter(new keyPressCatcher());
 		//app->setMainWidget( view );
 		mainWindow->show();
 
@@ -121,8 +140,8 @@ public:
 
 	void customEvent(QEvent *e) {
 		if (e->type() == (QEvent::User + 1)) {
-			std::cout << "text event received\n";
-			AngbandTextEvent *te = (AngbandTextEvent *)e;
+			//std::cout << "text event received\n";
+			AngTextEvent *te = (AngTextEvent *)e;
 			char str[2];
 			for (int i=0; i< te->get_n(); i++) {
 				sprintf(str, "%c", te->get_str()[i]);
@@ -130,7 +149,7 @@ public:
 			}
 		} else if (e->type() == (QEvent::User + 2)) {
 			std::cout << "wipe event received\n";
-			AngbandWipeEvent *we = (AngbandWipeEvent *)e;
+			AngWipeEvent *we = (AngWipeEvent *)e;
 			for (int i=0; i< we->get_n(); i++) {
 				screen[we->get_y()][we->get_x()+i]->setPlainText(" ");
 			}
@@ -145,7 +164,7 @@ private:
 } *app;
 
 static errr term_text_qt(int x, int y, int n, byte a, const wchar_t *s) {
-	app->postEvent(app, new AngbandTextEvent(x,y,n,a,s));
+	app->postEvent(app, new AngTextEvent(x,y,n,a,s));
 	return 0;
 }
 
@@ -183,9 +202,12 @@ static void term_nuke_qt(term *t) {
 }
 
 static errr term_xtra_qt(int n, int v) {
-	std::cout << "term_xtra_qt(" << n << "," << v << ")\n";
+	// std::cout << "term_xtra_qt(" << n << "," << v << ")\n";
 	switch(n) {
-	case TERM_XTRA_EVENT: std::cout << "TERM_XTRA_EVENT\n"; break;
+	case TERM_XTRA_EVENT:
+		//std::cout << "TERM_XTRA_EVENT\n";
+		// TODO: this is being called with v=1, but we don't handle that yet
+		break;
 	case TERM_XTRA_FLUSH: std::cout << "TERM_XTRA_FLUSH\n"; break;
 	case TERM_XTRA_CLEAR: std::cout << "TERM_XTRA_CLEAR\n"; break;
 	case TERM_XTRA_SHAPE: std::cout << "TERM_XTRA_SHAPE\n"; break;
@@ -203,7 +225,7 @@ static errr term_xtra_qt(int n, int v) {
 
 static errr term_wipe_qt(int x, int y, int n) {
 	std::cout << "term_wipe_qt(" << x << "," << y << "," << n <<")\n";
-	app->postEvent(app, new AngbandWipeEvent(x,y,n));
+	app->postEvent(app, new AngWipeEvent(x,y,n));
 	return -1;
 }
 
@@ -256,7 +278,7 @@ void GameThread::run() {
 }
 
 int main( int argc, char **argv ) {
-	app = new AngbandApp( argc, argv );
+	app = new AngApp( argc, argv );
 
 	/* Initialize some stuff */
 	init_stuff();
