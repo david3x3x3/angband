@@ -33,73 +33,11 @@ static errr qt_get_cmd(cmd_context context, bool wait)
 		return textui_get_cmd(context, wait);
 }
 
-class AngTextEvent : public QEvent {
-public:
-	AngTextEvent(int new_x, int new_y, int new_n, int new_a,
-					 const wchar_t *s) :
-		QEvent((QEvent::Type)(QEvent::User + 1)) {
-		x = new_x;
-		y = new_y;
-		n = new_n;
-		a = new_a;
-		str = new char[n+1];
-		for (int i=0; i < n; i++) {
-			wchar_t c = s[i];
-			str[i] = c < 256 ? c : '*';
-		}
-		str[n] = '\0';
-	}
-	~AngTextEvent() {
-		delete str;
-	}
-	int get_x() { return x; }
-	int get_y() { return y; }
-	int get_n() { return n; }
-	int get_a() { return a; }
-	char *get_str() { return str; }
-private:
-	int x;
-	int y;
-	int n;
-	byte a;
-	char *str;
-};
-
-class AngWipeEvent : public QEvent {
-public:
-	AngWipeEvent(int new_x, int new_y, int new_n) :
-		QEvent((QEvent::Type)(QEvent::User + 2)) {
-		x = new_x;
-		y = new_y;
-		n = new_n;
-	}
-	~AngWipeEvent() {
-	}
-	int get_x() { return x; }
-	int get_y() { return y; }
-	int get_n() { return n; }
-private:
-	int x;
-	int y;
-	int n;
-};
-
 class keyPressCatcher : public QObject {
 public:
 	keyPressCatcher() {}
 	~keyPressCatcher() {}
-  
-	bool eventFilter(QObject* object, QEvent* event) {
-		if (event->type() == QEvent::KeyPress) {
-			QKeyEvent *keyEvent = dynamic_cast<QKeyEvent *>(event);
-			std::cout << "You Pressed " << keyEvent->text().toStdString() <<
-				"\n";
-			return true;
-		} else {
-			// standard event processing
-			return QObject::eventFilter(object, event);
-		}
-	}
+	bool eventFilter(QObject* object, QEvent* event);
 };
 
 class AngApp : public QApplication {
@@ -131,29 +69,42 @@ public:
 			}
 		}
 		mainWindow->setCentralWidget(view);
-		mainWindow->installEventFilter(new keyPressCatcher());
+		//mainWindow->installEventFilter(new keyPressCatcher());
+		view->installEventFilter(new keyPressCatcher());
 		//app->setMainWidget( view );
 		mainWindow->show();
 
 		cmd_get_hook = qt_get_cmd;
 	}
 
-	void customEvent(QEvent *e) {
-		if (e->type() == (QEvent::User + 1)) {
-			//std::cout << "text event received\n";
-			AngTextEvent *te = (AngTextEvent *)e;
-			char str[2];
-			for (int i=0; i< te->get_n(); i++) {
-				sprintf(str, "%c", te->get_str()[i]);
-				screen[te->get_y()][te->get_x()+i]->setPlainText(str);
-			}
-		} else if (e->type() == (QEvent::User + 2)) {
-			std::cout << "wipe event received\n";
-			AngWipeEvent *we = (AngWipeEvent *)e;
-			for (int i=0; i< we->get_n(); i++) {
-				screen[we->get_y()][we->get_x()+i]->setPlainText(" ");
+	void term_xtra_clear() {
+		for (int r=0;r<24;r++) {
+			for (int c=0;c<80;c++) {
+				screen[r][c]->setPlainText(" ");
 			}
 		}
+	}
+	
+	errr term_text(int x, int y, int n, byte a, const wchar_t *s) {
+		char str[2];
+		str[1] = '\0';
+		for (int i=0; i < n; i++) {
+			wchar_t c = s[i];
+			str[0] = c < 256 ? c : '*';
+			screen[y][x+i]->setPlainText(str);
+		}
+		return 0;
+	}
+
+	errr term_wipe(int x, int y, int n) {
+		for (int i=0; i < n; i++) {
+			screen[y][x+i]->setPlainText(" ");
+		}
+		return 0;
+	}
+	
+	QQueue<int> *get_key_queue() {
+		return &key_queue;
 	}
 
 private:
@@ -161,11 +112,42 @@ private:
 	QMainWindow *mainWindow;
 	QGraphicsScene *scene;
 	QGraphicsView *view;
+	QQueue<int> key_queue;
 } *app;
 
+bool keyPressCatcher::eventFilter(QObject* object, QEvent* event) {
+	std::cout << "keyPressCatcher: " << (int)event << "\n";
+	if (event->type() == QEvent::KeyPress) {
+		keycode_t key;
+		QKeyEvent *keyEvent = dynamic_cast<QKeyEvent *>(event);
+
+		switch(keyEvent->key()) {
+		case Qt::Key_Up:    key = ARROW_UP;    break;
+		case Qt::Key_Down:  key = ARROW_DOWN;  break;
+		case Qt::Key_Left:  key = ARROW_LEFT;  break;
+		case Qt::Key_Right: key = ARROW_RIGHT; break;
+		default:
+			std::cout << "You Pressed " << keyEvent->text().toStdString() <<
+				"\n";
+			QByteArray ba = keyEvent->text().toAscii();
+			key = ba.at(0);
+		}
+
+		app->get_key_queue()->enqueue((int)key);
+		return true;
+	} else {
+		// standard event processing
+		return QObject::eventFilter(object, event);
+	}
+}
+
 static errr term_text_qt(int x, int y, int n, byte a, const wchar_t *s) {
-	app->postEvent(app, new AngTextEvent(x,y,n,a,s));
-	return 0;
+	//app->postEvent(app, new AngTextEvent(x,y,n,a,s));
+	return app->term_text(x,y,n,a,s);
+}
+
+static errr term_wipe_qt(int x, int y, int n) {
+	return app->term_wipe(x,y,n);
 }
 
 /*
@@ -201,32 +183,50 @@ static void term_nuke_qt(term *t) {
 	std::cout << "term_nuke_qt()\n";
 }
 
+#define CHECK_EVENTS_DRAIN -1
+#define CHECK_EVENTS_NO_WAIT	0
+#define CHECK_EVENTS_WAIT 1
+
+static bool check_events(int wait) {
+	if (wait == CHECK_EVENTS_WAIT) {
+		while (app->get_key_queue()->isEmpty()) {
+			app->processEvents();
+		}
+	}
+	if (wait != CHECK_EVENTS_DRAIN &&
+		!app->get_key_queue()->isEmpty()) {
+		Term_keypress(app->get_key_queue()->dequeue(), 0);
+	}
+	return FALSE;
+}
+
 static errr term_xtra_qt(int n, int v) {
+	int res=0;
 	// std::cout << "term_xtra_qt(" << n << "," << v << ")\n";
 	switch(n) {
 	case TERM_XTRA_EVENT:
-		//std::cout << "TERM_XTRA_EVENT\n";
-		// TODO: this is being called with v=1, but we don't handle that yet
+		check_events(v);
 		break;
-	case TERM_XTRA_FLUSH: std::cout << "TERM_XTRA_FLUSH\n"; break;
-	case TERM_XTRA_CLEAR: std::cout << "TERM_XTRA_CLEAR\n"; break;
-	case TERM_XTRA_SHAPE: std::cout << "TERM_XTRA_SHAPE\n"; break;
-	case TERM_XTRA_FROSH: std::cout << "TERM_XTRA_FROSH\n"; break;
-	case TERM_XTRA_FRESH: std::cout << "TERM_XTRA_FRESH\n"; break;
-	case TERM_XTRA_NOISE: std::cout << "TERM_XTRA_NOISE\n"; break;
-	case TERM_XTRA_BORED: std::cout << "TERM_XTRA_BORED\n"; break;
-	case TERM_XTRA_REACT: std::cout << "TERM_XTRA_REACT\n"; break;
-	case TERM_XTRA_ALIVE: std::cout << "TERM_XTRA_ALIVE\n"; break;
-	case TERM_XTRA_LEVEL: std::cout << "TERM_XTRA_LEVEL\n"; break;
-	case TERM_XTRA_DELAY: std::cout << "TERM_XTRA_DELAY\n"; break;
+	case TERM_XTRA_BORED:
+		check_events(CHECK_EVENTS_NO_WAIT);
+		break;
+	case TERM_XTRA_CLEAR:
+		std::cout << "TERM_XTRA_CLEAR\n";
+		app->term_xtra_clear();
+		break;
+	case TERM_XTRA_FROSH:
+	case TERM_XTRA_FRESH:
+		check_events(CHECK_EVENTS_DRAIN);
+		break;
+	case TERM_XTRA_FLUSH: std::cout << "TERM_XTRA_FLUSH\n"; res=-1; break;
+	case TERM_XTRA_SHAPE: std::cout << "TERM_XTRA_SHAPE\n"; res=-1; break;
+	case TERM_XTRA_NOISE: std::cout << "TERM_XTRA_NOISE\n"; res=-1; break;
+	case TERM_XTRA_REACT: std::cout << "TERM_XTRA_REACT\n"; res=-1; break;
+	case TERM_XTRA_ALIVE: std::cout << "TERM_XTRA_ALIVE\n"; res=-1; break;
+	case TERM_XTRA_LEVEL: std::cout << "TERM_XTRA_LEVEL\n"; res=-1; break;
+	case TERM_XTRA_DELAY: std::cout << "TERM_XTRA_DELAY\n"; res=-1; break;
 	}
-	return -1;
-}
-
-static errr term_wipe_qt(int x, int y, int n) {
-	std::cout << "term_wipe_qt(" << x << "," << y << "," << n <<")\n";
-	app->postEvent(app, new AngWipeEvent(x,y,n));
-	return -1;
+	return res;
 }
 
 static errr term_curs_qt(int x, int y) {
@@ -243,7 +243,7 @@ static errr term_pict_qt(int x, int y, int n, const byte *ap,
 
 static errr term_data_init(term_data *td, int i) {
 	term *t = &td->t;
-	term_init(t, 80, 24, i);
+    term_init(t, 80, 24, 256 /* keypresses, for some reason? */);
 
     /* Prepare the init/nuke hooks */
     t->init_hook = term_init_qt;
@@ -270,10 +270,7 @@ class GameThread : public QThread
 
 void GameThread::run() {
 	std::cout << "starting game thread\n";
-	/* Play the game */
 	play_game();
-
-	/* Free resources */
 	cleanup_angband();
 }
 
@@ -287,10 +284,13 @@ int main( int argc, char **argv ) {
 	term_data_init(&td, 0);
 	Term_activate(&td.t);
 
-	GameThread *game_thread = new GameThread();
-	game_thread->start();
+	// GameThread *game_thread = new GameThread();
+	// game_thread->start();
 
-	return app->exec();
+	//return app->exec();
+
+	play_game();
+	cleanup_angband();
 }
 
 #include "main-qt.moc"
