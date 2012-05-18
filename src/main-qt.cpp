@@ -17,12 +17,7 @@ struct term_data
 
 static game_command cmd = { CMD_NULL, 0 };
 
-static errr get_cmd_init() {
-	std::cout << "get_cmd_init()\n";
-	cmd.command = CMD_NEWGAME;
-    cmd_insert_s(&cmd);
-	return 0;
-}
+static errr get_cmd_init();
 
 static errr qt_get_cmd(cmd_context context, bool wait)
 {
@@ -227,6 +222,31 @@ static bool check_events(int wait) {
 		Term_keypress(app->get_key_queue()->dequeue(), 0);
 	}
 	return FALSE;
+}
+
+static errr get_cmd_init() {
+	std::cout << "get_cmd_init()\n";
+    if (cmd.command == CMD_NULL)
+    {
+        /* Prompt the user */ 
+        prt("[Choose 'New' or 'Open' from the 'File' menu]", 23, 17);
+        Term_fresh();
+        
+		while(1) {
+			app->processEvents();
+		}
+
+        // while (cmd.command == CMD_NULL) {
+        //     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+        //     NSEvent *event = [NSApp nextEventMatchingMask:NSAnyEventMask untilDate:[NSDate distantFuture] inMode:NSDefaultRunLoopMode dequeue:YES];
+        //     if (event) [NSApp sendEvent:event];
+        //     [pool drain];        
+        // }
+    }
+    
+	// cmd.command = CMD_NEWGAME;
+    cmd_insert_s(&cmd);
+	return 0;
 }
 
 static errr term_xtra_qt(int n, int v) {
