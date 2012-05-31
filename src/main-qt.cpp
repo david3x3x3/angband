@@ -21,11 +21,19 @@ static errr get_cmd_init();
 
 static errr qt_get_cmd(cmd_context context, bool wait)
 {
-	std::cout << "qt_get_cmd()\n";
+	// std::cout << "qt_get_cmd()\n";
 	if (context == CMD_INIT) 
 		return get_cmd_init();
 	else 
 		return textui_get_cmd(context, wait);
+}
+
+void msleep(unsigned long msec) {
+	QMutex m;
+	m.lock();
+	QWaitCondition w;
+	w.wait(&m, msec);
+	m.unlock();
 }
 
 class keyPressCatcher : public QObject {
@@ -36,6 +44,9 @@ public:
 };
 
 class AngApp : public QApplication {
+
+	Q_OBJECT
+
 public:
 	AngApp( int argc, char **argv ) : QApplication(argc, argv) {
 		mainWindow = new QMainWindow();
@@ -44,8 +55,6 @@ public:
 		view = new QGraphicsView(scene);
 		QFont myfont("Courier", 10);
 		QFontInfo myfontinfo(myfont);
-		qreal height = 0.0;
-		qreal width = 0.0;
 
 		colortable[TERM_DARK]    = QColor( 0*8,  0*8,  0*8);
 		colortable[TERM_WHITE]   = QColor(31*8, 31*8, 31*8);
@@ -71,17 +80,39 @@ public:
 				text->document()->setDocumentMargin(0);
 				text->setDefaultTextColor(Qt::white);
 				if (!r && !c) {
+					// figure out font size from the size of the first char
 					QRectF rect = text->boundingRect();
-					height = text->document()->size().height();
-					width = text->document()->size().width();
-					scene->setSceneRect(0,0,width*80,height*24);
-					std::cout << "width = " << width << "\n";
+					char_height = text->document()->size().height();
+					char_width = text->document()->size().width();
+					scene->setSceneRect(0,0,char_width*80,char_height*24);
+					cursor = scene->addRect(0, 0, char_width, char_height,
+											Qt::SolidLine, Qt::green);
+					// std::cout << "width = " << width << "\n";
 				}
-				text->translate(c*width,r*height);
+				text->translate(c*char_width,r*char_height);
 				screen[r][c] = text;
 			}
 		}
+
+		setQuitOnLastWindowClosed(TRUE);
+
 		mainWindow->setCentralWidget(view);
+		QMenuBar *mb = mainWindow->menuBar();
+		QMenu *file_menu = mb->addMenu(tr("&File"));
+
+		QAction *new_action = new QAction(tr("&New"), this);
+		connect(new_action, SIGNAL(triggered()), this, SLOT(newGame()));
+		file_menu->addAction(new_action);
+
+		QAction *open_action = new QAction(tr("&Open"), this);
+		connect(open_action, SIGNAL(triggered()), this, SLOT(openFile()));
+		file_menu->addAction(open_action);
+
+		exit_action = new QAction(tr("E&xit"), this);
+		connect(exit_action, SIGNAL(triggered()), this,
+				SLOT(closeAllWindows()));
+		file_menu->addAction(exit_action);
+		
 		//mainWindow->installEventFilter(new keyPressCatcher());
 		view->installEventFilter(new keyPressCatcher());
 		//app->setMainWidget( view );
@@ -102,13 +133,14 @@ public:
 		char str[2];
 		str[1] = '\0';
 		int attr = a & 127;
-		std::cout << "color = " << attr << "\n";
+		// std::cout << "color = " << attr << "\n";
 		for (int i=0; i < n; i++) {
 			wchar_t c = s[i];
 			str[0] = c < 256 ? c : '*';
 			screen[y][x+i]->setPlainText(str);
 			screen[y][x+i]->setDefaultTextColor(colortable[attr]);
 		}
+		moveCursor(x,y);
 		return 0;
 	}
 
@@ -123,13 +155,39 @@ public:
 		return &key_queue;
 	}
 
+	void moveCursor(int x, int y) {
+		cursor->setPos(char_width*x,char_height*y);
+	}
+
+	void cursSet(int v) {
+		cursor->setBrush(v ? Qt::green : Qt::black);
+	}
+
+public slots:
+	void openFile() {
+		QString fileName =
+			QFileDialog::getOpenFileName(mainWindow, tr("Open Character"),
+										 ANGBAND_DIR_SAVE,
+										 tr("All Files (*.*)"));
+		strcpy(savefile, fileName.toAscii().data());
+		cmd.command = CMD_LOADFILE;
+	}
+
+	void newGame() {
+		cmd.command = CMD_NEWGAME;
+	}
+
 private:
 	QGraphicsTextItem *screen[24][80];
+	QGraphicsRectItem *cursor;
 	QMainWindow *mainWindow;
 	QGraphicsScene *scene;
 	QGraphicsView *view;
 	QQueue<int> key_queue;
 	QColor colortable[BASIC_COLORS];
+	QAction *exit_action;
+	qreal char_height;
+	qreal char_width;
 } *app;
 
 bool keyPressCatcher::eventFilter(QObject* object, QEvent* event) {
@@ -150,7 +208,7 @@ bool keyPressCatcher::eventFilter(QObject* object, QEvent* event) {
 		default:
 			QByteArray ba = keyEvent->text().toAscii();
 			if(ba.length() != 1) {
-				std::cout << "unknown key: " << keyEvent->key() << "\n";
+				// std::cout << "unknown key: " << keyEvent->key() << "\n";
 				return true;
 			}
 			key = ba.at(0);
@@ -199,11 +257,11 @@ static void init_stuff(void)
 }
 
 static void term_init_qt(term *t) {
-	std::cout << "term_init_qt()\n";
+	// std::cout << "term_init_qt()\n";
 }
 
 static void term_nuke_qt(term *t) {
-	std::cout << "term_nuke_qt()\n";
+	// std::cout << "term_nuke_qt()\n";
 }
 
 #define CHECK_EVENTS_DRAIN -1
@@ -214,7 +272,8 @@ static bool check_events(int wait) {
 	// TODO: we need to handle DeferredEvents here.
 	if (wait == CHECK_EVENTS_WAIT) {
 		while (app->get_key_queue()->isEmpty()) {
-			app->processEvents();
+			app->processEvents(QEventLoop::AllEvents, 100);
+			msleep(100);
 		}
 	}
 	if (wait != CHECK_EVENTS_DRAIN &&
@@ -225,26 +284,19 @@ static bool check_events(int wait) {
 }
 
 static errr get_cmd_init() {
-	std::cout << "get_cmd_init()\n";
+	// std::cout << "get_cmd_init()\n";
     if (cmd.command == CMD_NULL)
     {
         /* Prompt the user */ 
         prt("[Choose 'New' or 'Open' from the 'File' menu]", 23, 17);
         Term_fresh();
         
-		while(1) {
+        while (cmd.command == CMD_NULL) {
 			app->processEvents();
+			msleep(100);
 		}
-
-        // while (cmd.command == CMD_NULL) {
-        //     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-        //     NSEvent *event = [NSApp nextEventMatchingMask:NSAnyEventMask untilDate:[NSDate distantFuture] inMode:NSDefaultRunLoopMode dequeue:YES];
-        //     if (event) [NSApp sendEvent:event];
-        //     [pool drain];        
-        // }
     }
     
-	// cmd.command = CMD_NEWGAME;
     cmd_insert_s(&cmd);
 	return 0;
 }
@@ -260,33 +312,39 @@ static errr term_xtra_qt(int n, int v) {
 		check_events(CHECK_EVENTS_NO_WAIT);
 		break;
 	case TERM_XTRA_CLEAR:
-		std::cout << "TERM_XTRA_CLEAR\n";
+		// std::cout << "TERM_XTRA_CLEAR\n";
 		app->term_xtra_clear();
 		break;
 	case TERM_XTRA_FROSH:
 	case TERM_XTRA_FRESH:
 		check_events(CHECK_EVENTS_DRAIN);
 		break;
-	case TERM_XTRA_FLUSH: std::cout << "TERM_XTRA_FLUSH\n"; res=-1; break;
-	case TERM_XTRA_SHAPE: std::cout << "TERM_XTRA_SHAPE\n"; res=-1; break;
-	case TERM_XTRA_NOISE: std::cout << "TERM_XTRA_NOISE\n"; res=-1; break;
-	case TERM_XTRA_REACT: std::cout << "TERM_XTRA_REACT\n"; res=-1; break;
-	case TERM_XTRA_ALIVE: std::cout << "TERM_XTRA_ALIVE\n"; res=-1; break;
-	case TERM_XTRA_LEVEL: std::cout << "TERM_XTRA_LEVEL\n"; res=-1; break;
-	case TERM_XTRA_DELAY: std::cout << "TERM_XTRA_DELAY\n"; res=-1; break;
+	case TERM_XTRA_SHAPE:
+		app->cursSet(v);
+		break;
+	// case TERM_XTRA_FLUSH: std::cout << "TERM_XTRA_FLUSH\n"; res=-1; break;
+	// case TERM_XTRA_NOISE: std::cout << "TERM_XTRA_NOISE\n"; res=-1; break;
+	// case TERM_XTRA_REACT: std::cout << "TERM_XTRA_REACT\n"; res=-1; break;
+	// case TERM_XTRA_ALIVE: std::cout << "TERM_XTRA_ALIVE\n"; res=-1; break;
+	// case TERM_XTRA_LEVEL: std::cout << "TERM_XTRA_LEVEL\n"; res=-1; break;
+	// case TERM_XTRA_DELAY: std::cout << "TERM_XTRA_DELAY\n"; res=-1; break;
+	default:
+		res=-1;
+		break;
 	}
 	return res;
 }
 
 static errr term_curs_qt(int x, int y) {
-	std::cout << "term_curs_qt(" << x << "," << y << ")\n";
-	return -1;
+	// std::cout << "term_curs_qt(" << x << "," << y << ")\n";
+	app->moveCursor(x,y);
+	return 0;
 }
 
 static errr term_pict_qt(int x, int y, int n, const byte *ap,
 						 const wchar_t *cp, const byte *tap,
 						 const wchar_t *tcp) {
-	std::cout << "term_pict_qt()\n";
+	// std::cout << "term_pict_qt()\n";
 	return -1;
 }
 
@@ -320,7 +378,7 @@ class GameThread : public QThread
 };
 
 void GameThread::run() {
-	std::cout << "starting game thread\n";
+	// std::cout << "starting game thread\n";
 	play_game();
 	cleanup_angband();
 }
