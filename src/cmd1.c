@@ -112,14 +112,8 @@ bool search(bool verbose)
 				/* Scan all objects in the grid */
 				for (o_ptr = get_first_object(y, x); o_ptr; o_ptr = get_next_object(o_ptr))
 				{
-					/* Skip non-chests */
-					if (o_ptr->tval != TV_CHEST) continue;
-
-					/* Skip disarmed chests */
-					if (o_ptr->pval[DEFAULT_PVAL] <= 0) continue;
-
-					/* Skip non-trapped chests */
-					if (!chest_traps[o_ptr->pval[DEFAULT_PVAL]]) continue;
+					/* Skip if not a trapped chest */
+					if (!is_trapped_chest(o_ptr)) continue;
 
 					/* Identify once */
 					if (!object_is_known(o_ptr))
@@ -479,7 +473,7 @@ byte py_pickup(int pickup)
 	if (!cave->o_idx[py][px]) return objs_picked_up;
 
 	/* Tally objects that can be picked up.*/
-	floor_num = scan_floor(floor_list, N_ELEMENTS(floor_list), py, px, 0x03);
+	floor_num = scan_floor(floor_list, N_ELEMENTS(floor_list), py, px, 0x01);
 	for (i = 0; i < floor_num; i++)
 	{
 	    can_pickup += inven_carry_okay(object_byid(floor_list[i]));

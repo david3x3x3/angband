@@ -1,5 +1,5 @@
 dnl Process this file with autoconf to produce a configure script.
-AC_INIT(Angband, 3.3.0, bugs@rephial.org)
+AC_INIT(Angband, 3.5-dev, bugs@rephial.org)
 AC_CONFIG_SRCDIR(src)
 
 AC_CANONICAL_HOST
@@ -115,7 +115,7 @@ if test "x$with_private_dirs" != "x"; then
 	AC_DEFINE(USE_PRIVATE_PATHS, 1, [Define to use private save and score paths.])
 fi
 
-# Only change bindir if it's the configure-supplied default, which handily doesn't expand exec_prefix
+# Only change bindir  it's the configure-supplied default, which handily doesn't expand exec_prefix
 if test "x$bindir" = "x\${exec_prefix}/bin"; then
   bindir=${exec_prefix}/games
 fi
@@ -193,9 +193,9 @@ AC_ARG_ENABLE(stats,
 
 dnl Sound modules
 AC_ARG_ENABLE(sdl_mixer,
-	[AS_HELP_STRING([--enable-sdl-mixer], [Enables SDL mixer sound support (default: enabled)])],
+	[AS_HELP_STRING([--enable-sdl-mixer], [Enables SDL mixer sound support (default: disabled unless SDL enabled)])],
 	[enable_sdl_mixer=$enable_sdl_mixer],
-	[enable_sdl_mixer=yes])
+	[enable_sdl_mixer=$enable_sdl])
 
 MAINFILES="\$(BASEMAINFILES)"
 
@@ -263,9 +263,14 @@ if test "$enable_sdl_mixer" = "yes"; then
 
 	if test "$found_sdl_mixer" = "yes"; then
 		AC_DEFINE(SOUND_SDL, 1, [Define to 1 if using SDL_mixer sound support and it's found.])
-		SDL_CFLAGS=`sdl-config --cflags`
-		CFLAGS="${CFLAGS} ${SDL_CFLAGS}"
-		LIBS="${LIBS} -lSDL_mixer"
+		if test "$with_sdl" = "yes"; then
+			LIBS="${LIBS} -lSDL_mixer"
+		else
+			SDL_CFLAGS=`sdl-config --cflags`
+			CFLAGS="${CFLAGS} ${SDL_CFLAGS}"
+			SDL_LIBS=`sdl-config --libs`
+			LIBS="${LIBS} ${SDL_LIBS} -lSDL_mixer"
+		fi
 		MAINFILES="${MAINFILES} \$(SNDSDLFILES)"
 	fi
 fi

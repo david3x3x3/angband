@@ -2927,7 +2927,8 @@ int context_menu_store_item(struct store *store, const int oid, int x, int y);
 static bool store_menu_handle(menu_type *m, const ui_event *event, int oid)
 {
 	bool processed = TRUE;
-
+	struct store *store = current_store();
+	
 	if (event->type == EVT_SELECT)
 	{
 		/* Nothing for now, except "handle" the event */
@@ -2984,34 +2985,30 @@ static bool store_menu_handle(menu_type *m, const ui_event *event, int oid)
 			case 'd': storechange = store_sell(); break;
 			case 'p':
 			case 'g':
-				{
-					/*if (TRUE) {*/
-						/* use the old way of purchasing items */
-						msg_flag = FALSE;
-						prt("Purchase which item? (ESC to cancel, Enter to select)", 0, 0);
-						oid = store_get_stock(m, oid);
-						prt("", 0, 0);
-					/*}*/
-					if (oid >= 0) {
-						storechange = store_purchase(oid);
-					}
-					break;
+				/* use the old way of purchasing items */
+				msg_flag = FALSE;
+				if (store->sidx != STORE_HOME) {
+					prt("Purchase which item? (ESC to cancel, Enter to select)", 0, 0);
+				} else {
+					prt("Get which item? (Esc to cancel, Enter to select)", 0, 0);
 				}
+				oid = store_get_stock(m, oid);
+				prt("", 0, 0);
+				if (oid >= 0) {
+					storechange = store_purchase(oid);
+				}
+				break;
 			case 'l':
 			case 'x':
-				{
-					/*if (TRUE) {*/
-						/* use the old way of examining items */
-						msg_flag = FALSE;
-						prt("Examine which item? (ESC to cancel, Enter to select)", 0, 0);
-						oid = store_get_stock(m, oid);
-						prt("", 0, 0);
-					/*}*/
-					if (oid >= 0) {
-						store_examine(oid);
-					}
-					break;
+				/* use the old way of examining items */
+				msg_flag = FALSE;
+				prt("Examine which item? (ESC to cancel, Enter to select)", 0, 0);
+				oid = store_get_stock(m, oid);
+				prt("", 0, 0);
+				if (oid >= 0) {
+					store_examine(oid);
 				}
+				break;
 
 			/* XXX redraw functionality should be another menu_iter handler */
 			case KTRL('R'): {

@@ -1457,6 +1457,9 @@ bool show_file(const char *name, const char *what, int line, int mode)
 			/* skip | characters */
 			strskip(buf,'|');
 
+			/* escape backslashes */
+			strescape(buf,'\\');
+
 			/* Count the "real" lines */
 			next++;
 
@@ -1516,7 +1519,7 @@ bool show_file(const char *name, const char *what, int line, int mode)
 		if (menu)
 		{
 			/* Wait for it */
-			prt("[Press a Number, or ESC to exit.]", hgt - 1, 0);
+			prt("[Press a Letter, or ESC to exit.]", hgt - 1, 0);
 		}
 
 		/* Prompt -- small files */
